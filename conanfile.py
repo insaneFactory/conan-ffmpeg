@@ -267,6 +267,9 @@ class FFMpegConan(ConanFile):
                     args.extend(['--disable-libxcb', '--disable-libxcb-shm',
                                  '--disable-libxcb-shape', '--disable-libxcb-xfixes'])
 
+                args.append('--enable-indev=alsa' if self.options.alsa else '--disable-indev=alsa')
+                args.append('--enable-outdev=alsa' if self.options.alsa else '--disable-outdev=alsa')
+
             if self.settings.os == "Macos":
                 args.append('--enable-appkit' if self.options.appkit else '--disable-appkit')
                 args.append('--enable-avfoundation' if self.options.avfoundation else '--disable-avfoundation')
