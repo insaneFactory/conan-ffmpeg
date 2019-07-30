@@ -14,6 +14,7 @@ class FFMpegConan(ConanFile):
     description = "A complete, cross-platform solution to record, convert and stream audio and video"
     license = "https://github.com/FFmpeg/FFmpeg/blob/master/LICENSE.md"
     exports_sources = ["LICENSE"]
+    generators = "pkg_config"
     settings = "os", "arch", "compiler", "build_type"
     options = {"shared": [True, False],
                "fPIC": [True, False],
@@ -285,39 +286,39 @@ class FFMpegConan(ConanFile):
             # FIXME disable CUDA and CUVID by default, revisit later
             args.extend(['--disable-cuda', '--disable-cuvid'])
 
-            os.makedirs('pkgconfig')
-            if self.options.freetype:
-                self.copy_pkg_config('freetype')
-                self.copy_pkg_config('libpng')
-            if self.options.opus:
-                self.copy_pkg_config('opus')
-            if self.options.vorbis:
-                self.copy_pkg_config('ogg')
-                self.copy_pkg_config('vorbis')
-            if self.options.zmq:
-                self.copy_pkg_config('zmq')
-            if self.options.sdl2:
-                self.copy_pkg_config('sdl2')
-            if self.options.x264:
-                self.copy_pkg_config('libx264')
-            if self.options.x265:
-                self.copy_pkg_config('libx265')
-            if self.options.vpx:
-                self.copy_pkg_config('libvpx')
-            if self.options.fdk_aac:
-                self.copy_pkg_config('libfdk_aac')
-            if self.options.openh264:
-                self.copy_pkg_config('openh264')
-
-            env_vars = {'PKG_CONFIG_PATH': os.path.abspath('pkgconfig')}
+            # Create pkg-config files.
+            pkgconfig_dir = self.build_folder
+            env_vars = { 'PKG_CONFIG_PATH': pkgconfig_dir }
+            
+            for filename in os.listdir(pkgconfig_dir):
+                if filename.startswith("lib") and filename.endswith(".pc"):
+                    filefrom = os.path.join(pkgconfig_dir, filename)
+                    fileto = os.path.join(pkgconfig_dir, filename[3:])
+                    os.rename(filefrom, fileto)
 
             if self.settings.compiler == 'Visual Studio':
                 args.append('--extra-cflags=-%s' % self.settings.compiler.runtime)
                 if int(str(self.settings.compiler.version)) <= 12:
                     args.append('--extra-cflags=-Dsnprintf=_snprintf')
 
+            # Environmental variables.
+            if self.settings.os != 'Windows':
+                env_cc = tools.get_env('CC')
+                if env_cc is not None and len(env_cc) > 0:
+                    args.append('--cc=%s' % env_cc)
+
+                env_cxx = tools.get_env('CXX')
+                if env_cxx is not None and len(env_cxx) > 0:
+                    args.append('--cxx=%s' % env_cxx)
+                    args.append('--extra-libs="-lstdc++"')
+
+                env_ld_library_path = tools.get_env('LD_LIBRARY_PATH')
+                if env_ld_library_path is not None and len(env_ld_library_path) > 0:
+                    env_vars['LD_LIBRARY_PATH'] = env_ld_library_path
+
             with tools.environment_append(env_vars):
                 env_build = AutoToolsBuildEnvironment(self, win_bash=self.is_mingw or self.is_msvc)
+                env_build.vars.update(env_vars)
                 # ffmpeg's configure is not actually from autotools, so it doesn't understand standard options like
                 # --host, --build, --target
                 env_build.configure(args=args, build=False, host=False, target=False)
