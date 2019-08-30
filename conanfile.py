@@ -323,12 +323,35 @@ class FFMpegConan(ConanFile):
             # FIXME disable CUDA and CUVID by default, revisit later
             args.extend(['--disable-cuda', '--disable-cuvid'])
 
-            env_build = AutoToolsBuildEnvironment(self, win_bash=self._is_mingw_windows or self._is_msvc)
-            # ffmpeg's configure is not actually from autotools, so it doesn't understand standard options like
-            # --host, --build, --target
-            env_build.configure(args=args, build=False, host=False, target=False)
-            env_build.make()
-            env_build.make(args=['install'])
+            # Find pkg-config files.
+            pkgconfig_dir = self.build_folder
+            env_vars = { 'PKG_CONFIG_PATH': pkgconfig_dir }
+            args.append('--pkgconfigdir=%s' % pkgconfig_dir)
+
+            # Environmental variables for compiler and std library.
+            if self.settings.os != 'Windows':
+                env_cc = tools.get_env('CC')
+                if env_cc is not None and len(env_cc) > 0:
+                    args.append('--cc=%s' % env_cc)
+
+                env_cxx = tools.get_env('CXX')
+                if env_cxx is not None and len(env_cxx) > 0:
+                    args.append('--cxx=%s' % env_cxx)
+                    args.append('--extra-libs="-lstdc++"')
+                    args.append('--extra-libs="-lm"')
+
+                env_ld_library_path = tools.get_env('LD_LIBRARY_PATH')
+                if env_ld_library_path is not None and len(env_ld_library_path) > 0:
+                    env_vars['LD_LIBRARY_PATH'] = env_ld_library_path
+
+            with tools.environment_append(env_vars):
+                env_build = AutoToolsBuildEnvironment(self, win_bash=self._is_mingw_windows or self._is_msvc)
+                env_build.vars.update(env_vars)
+                # ffmpeg's configure is not actually from autotools, so it doesn't understand standard options like
+                # --host, --build, --target
+                env_build.configure(args=args, build=False, host=False, target=False)
+                env_build.make()
+                env_build.make(args=['install'])
 
     def package(self):
         with tools.chdir(self._source_subfolder):
