@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from conans import ConanFile, AutoToolsBuildEnvironment, tools
 import os
 import glob
@@ -9,15 +6,15 @@ import shutil
 
 class FFMpegConan(ConanFile):
     name = "ffmpeg"
-    version = "4.2"
+    version = "4.2.1"
     url = "https://github.com/bincrafters/conan-ffmpeg"
     description = "A complete, cross-platform solution to record, convert and stream audio and video"
     # https://github.com/FFmpeg/FFmpeg/blob/master/LICENSE.md
-    license = "LGPL-2.1-or-later", "GPL-2.0-or-later"
+    license = ("LGPL-2.1-or-later", "GPL-2.0-or-later")
     homepage = "https://ffmpeg.org/"
     author = "Bincrafters <bincrafters@gmail.com>"
-    topics = "ffmpeg", "multimedia", "audio", "video", "encoder", "decoder", "encoding", "decoding",\
-             "transcoding", "multiplexer", "demultiplexer", "streaming"
+    topics = ("ffmpeg", "multimedia", "audio", "video", "encoder", "decoder", "encoding", "decoding",
+             "transcoding", "multiplexer", "demultiplexer", "streaming")
     exports_sources = ["LICENSE"]
     settings = "os", "arch", "compiler", "build_type"
     options = {"shared": [True, False],
@@ -98,14 +95,20 @@ class FFMpegConan(ConanFile):
         return self.settings.compiler == 'Visual Studio'
 
     def source(self):
-        source_url = "http://ffmpeg.org/releases/ffmpeg-%s.tar.bz2" % self.version
+        source_url = "http://ffmpeg.org/releases/ffmpeg-%s.tar.xz" % self.version
         tools.get(source_url,
-                  sha256="306bde5f411e9ee04352d1d3de41bd3de986e42e2af2a4c44052dce1ada26fb8")
+                  sha256="cec7c87e9b60d174509e263ac4011b522385fd0775292e1670ecc1180c9bb6d4")
         extracted_dir = self.name + "-" + self.version
         os.rename(extracted_dir, self._source_subfolder)
 
+        if self.settings.os == "Windows":
+            tools.replace_in_file(os.path.join(self._source_subfolder, "configure"),
+                    "enabled  lzma && check_lib lzma   lzma.h lzma_version_number -llzma",
+                    "enabled  lzma && check_lib lzma   lzma.h lzma_version_number -lliblzma")
+
     def configure(self):
         del self.settings.compiler.libcxx
+        del self.settings.compiler.cppstd
 
     def config_options(self):
         if self.settings.os == "Windows":
@@ -127,22 +130,22 @@ class FFMpegConan(ConanFile):
             self.options.remove("qsv")
 
     def build_requirements(self):
-        self.build_requires("yasm_installer/1.3.0@bincrafters/stable")
+        self.build_requires("yasm/1.3.0")
         if tools.os_info.is_windows:
             if "CONAN_BASH_PATH" not in os.environ:
                 self.build_requires("msys2_installer/latest@bincrafters/stable")
 
     def requirements(self):
         if self.options.zlib:
-            self.requires.add("zlib/1.2.11@conan/stable")
+            self.requires.add("zlib/1.2.11")
         if self.options.bzlib:
-            self.requires.add("bzip2/1.0.8@conan/stable")
+            self.requires.add("bzip2/1.0.8")
         if self.options.lzma:
-            self.requires.add("lzma/5.2.4@bincrafters/stable")
+            self.requires.add("xz_utils/5.2.4")
         if self.options.iconv:
-            self.requires.add("libiconv/1.15@bincrafters/stable")
+            self.requires.add("libiconv/1.15")
         if self.options.freetype:
-            self.requires.add("freetype/2.10.0@bincrafters/stable")
+            self.requires.add("freetype/2.10.0")
         if self.options.openjpeg:
             self.requires.add("openjpeg/2.3.1@bincrafters/stable")
         if self.options.openh264:
@@ -166,9 +169,9 @@ class FFMpegConan(ConanFile):
         if self.options.fdk_aac:
             self.requires.add("libfdk_aac/2.0.0@bincrafters/stable")
         if self.options.webp:
-            self.requires.add("libwebp/1.0.3@bincrafters/stable")
+            self.requires.add("libwebp/1.0.3")
         if self.options.openssl:
-            self.requires.add("OpenSSL/1.1.1c@conan/stable")
+            self.requires.add("openssl/1.0.2t")
         if self.settings.os == "Windows":
             if self.options.qsv:
                 self.requires.add("intel_media_sdk/2018R2_1@bincrafters/stable")
@@ -220,7 +223,7 @@ class FFMpegConan(ConanFile):
                                   '#define X264_API_IMPORTS 1', '')
         if self.options.openssl:
             # https://trac.ffmpeg.org/ticket/5675
-            openssl_libraries = ' '.join(['-l%s' % lib for lib in self.deps_cpp_info["OpenSSL"].libs])
+            openssl_libraries = ' '.join(['-l%s' % lib for lib in self.deps_cpp_info["openssl"].libs])
             tools.replace_in_file(os.path.join(self._source_subfolder, 'configure'),
                                   'check_lib openssl openssl/ssl.h SSL_library_init -lssl -lcrypto -lws2_32 -lgdi32 ||',
                                   'check_lib openssl openssl/ssl.h OPENSSL_init_ssl %s || ' % openssl_libraries)
@@ -236,6 +239,7 @@ class FFMpegConan(ConanFile):
             shutil.move("freetype.pc", "freetype2.pc")
         if self.options.openjpeg:
             shutil.move("openjpeg.pc", "libopenjp2.pc")
+            shutil.move("tiff.pc", "libtiff.pc")
         if self.options.x264:
             shutil.move("libx264.pc", "x264.pc")
         if self.options.x265:
@@ -246,6 +250,8 @@ class FFMpegConan(ConanFile):
             self._copy_pkg_config('libwebp')  # components: libwebpmux
         if self.options.vorbis:
             self._copy_pkg_config('vorbis')  # components: vorbisenc, vorbisfile
+        if self.options.lzma:
+            shutil.move("xz_utils.pc", "lzma.pc")
         with tools.chdir(self._source_subfolder):
             prefix = tools.unix_path(self.package_folder) if self.settings.os == 'Windows' else self.package_folder
             args = ['--prefix=%s' % prefix,
@@ -323,12 +329,8 @@ class FFMpegConan(ConanFile):
             # FIXME disable CUDA and CUVID by default, revisit later
             args.extend(['--disable-cuda', '--disable-cuvid'])
 
-            # Find pkg-config files.
-            pkgconfig_dir = self.build_folder
-            env_vars = { 'PKG_CONFIG_PATH': pkgconfig_dir }
-            args.append('--pkgconfigdir=%s' % pkgconfig_dir)
-
             # Environmental variables for compiler and std library.
+            env_vars = {}
             if self.settings.os != 'Windows':
                 env_cc = tools.get_env('CC')
                 if env_cc is not None and len(env_cc) > 0:
@@ -343,15 +345,17 @@ class FFMpegConan(ConanFile):
                 env_ld_library_path = tools.get_env('LD_LIBRARY_PATH')
                 if env_ld_library_path is not None and len(env_ld_library_path) > 0:
                     env_vars['LD_LIBRARY_PATH'] = env_ld_library_path
+            else:
+                args.append("--extra-cflags='-DWIN32_LEAN_AND_MEAN='")
+                args.append("--extra-cxxflags='-DWIN32_LEAN_AND_MEAN='")
 
-            with tools.environment_append(env_vars):
-                env_build = AutoToolsBuildEnvironment(self, win_bash=self._is_mingw_windows or self._is_msvc)
-                env_build.vars.update(env_vars)
-                # ffmpeg's configure is not actually from autotools, so it doesn't understand standard options like
-                # --host, --build, --target
-                env_build.configure(args=args, build=False, host=False, target=False)
-                env_build.make()
-                env_build.make(args=['install'])
+            env_build = AutoToolsBuildEnvironment(self, win_bash=self._is_mingw_windows or self._is_msvc)
+            env_build.vars.update(env_vars)
+            # ffmpeg's configure is not actually from autotools, so it doesn't understand standard options like
+            # --host, --build, --target
+            env_build.configure(args=args, build=False, host=False, target=False)
+            env_build.make()
+            env_build.make(args=['install'])
 
     def package(self):
         with tools.chdir(self._source_subfolder):
